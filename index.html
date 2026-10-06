@@ -1,0 +1,1317 @@
+<!DOCTYPE html>
+<html lang="en" translate="no" class="notranslate">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="google" content="notranslate" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" /><meta http-equiv="Expires" content="0" />
+<title>TT · 唱聊天记录 · 直接八卦版</title>
+<style>
+  /* ============================================================
+     TT (TikTok) 唱聊天记录 — DM 场景（聚焦）
+       长按消息 → 多选一段 drama 聊天 → AI 谱成歌 → 对话变歌词 → 投稿
+     设计语言沿用已确认的 index.html DM 规范。
+     全部文案/时间轴集中在底部 DATA。
+     ============================================================ */
+  :root{
+    --tt-red:#FE2C55; --tt-cyan:#25F4EE;
+    --chat-purple:#7C3AED;
+    --ink:#161823; --ink-2:#8A8B91; --ink-3:#C5C6CC;
+    --divider:#F1F1F2; --sheet:#FFFFFF; --field:#F1F1F2;
+    --ios-blue:#0A84FF;
+    --phone-w:393px; --phone-h:852px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;margin:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Arial,"PingFang SC",sans-serif;
+    background:radial-gradient(1200px 800px at 50% -10%,#2a2d34 0%,#15171c 55%,#0c0d10 100%);
+    display:flex;align-items:center;justify-content:center;gap:34px;
+    min-height:100vh;color:#fff;overflow:hidden;
+  }
+  svg{display:block;}
+
+  /* ?phone recording mode: keep only a crisp, centered phone preview. */
+  body.phone-only{gap:0;}
+  body.phone-only .panel{display:none;}
+  .start-gate{position:fixed;inset:0;z-index:999;display:none;align-items:center;justify-content:center;border:0;
+    background:rgba(8,9,12,.68);color:#fff;cursor:pointer;backdrop-filter:blur(4px);}
+  body.phone-only .start-gate{display:flex;}
+  .start-gate.hide{display:none!important;}
+  .start-gate .gate-content{display:flex;flex-direction:column;align-items:center;gap:12px;font:700 16px/1.2 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;}
+  .start-gate .gate-play{width:82px;height:82px;border-radius:50%;display:grid;place-items:center;background:var(--tt-red);
+    box-shadow:0 14px 38px rgba(254,44,85,.42);}
+  .start-gate .gate-play svg{width:34px;height:34px;margin-left:4px;}
+  .start-gate small{font-size:12px;font-weight:500;color:rgba(255,255,255,.72);}
+
+  /* ---------- phone frame ---------- */
+  .stage{transform:scale(var(--fit,1));transform-origin:center;}
+  .phone{position:relative;width:var(--phone-w);height:var(--phone-h);background:#000;border-radius:54px;
+    box-shadow:0 0 0 12px #1b1c1f,0 0 0 14px #333,0 40px 90px rgba(0,0,0,.6);overflow:hidden;}
+  .screen{position:absolute;inset:0;border-radius:54px;overflow:hidden;background:#000;isolation:isolate;}
+  /* 每个全屏层都跟随屏幕圆角，避免直角矩形顶出圆角、露出白边 */
+  .dm,.genview,.songview,.postview,.feedview{border-radius:54px;}
+  .island{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:122px;height:34px;background:#000;border-radius:20px;z-index:60;}
+  .status{position:absolute;top:0;left:0;right:0;height:54px;z-index:55;display:flex;align-items:center;justify-content:space-between;
+    padding:15px 24px 0;font-weight:700;font-size:17px;letter-spacing:.3px;color:#fff;pointer-events:none;}
+  .status.dark{color:var(--ink);}
+  .status .l{display:flex;align-items:center;gap:5px;min-width:56px;font-variant-numeric:tabular-nums;}
+  .status .l .loc{width:13px;height:13px;}
+  .status .r{display:flex;align-items:center;gap:6px;}
+  .status .bars{display:flex;align-items:flex-end;gap:2px;height:12px;}
+  .status .bars i{width:3.5px;background:currentColor;border-radius:1px;}
+  .status .bars i:nth-child(1){height:4px}.status .bars i:nth-child(2){height:6.5px}
+  .status .bars i:nth-child(3){height:9px}.status .bars i:nth-child(4){height:12px}
+  .status .wifi{width:18px;height:13.5px;}
+  .status .batt{display:flex;align-items:center;gap:5px;}
+  .status .batt .cell{width:27px;height:13px;border:1px solid currentColor;border-radius:4.5px;position:relative;box-sizing:border-box;}
+  .status:not(.dark) .batt .cell{border-color:rgba(255,255,255,.45);}
+  .status.dark .batt .cell{border-color:rgba(22,24,35,.35);}
+  .status .batt .cell::after{content:"";position:absolute;right:-3px;top:50%;transform:translateY(-50%);width:2px;height:5px;background:currentColor;border-radius:0 2px 2px 0;opacity:.4;}
+  .status .batt .cell i{position:absolute;top:1.5px;bottom:1.5px;left:1.5px;width:74%;background:currentColor;border-radius:2.5px;}
+  .home-ind{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:134px;height:5px;border-radius:3px;background:#fff;opacity:.9;z-index:70;}
+  .home-ind.dark{background:#000;}
+
+  /* ============================================================
+     DM (聊天) — 1:1 复刻玩法A 规范
+     ============================================================ */
+  .dm{position:absolute;inset:0;background:#fff;z-index:20;color:var(--ink);display:flex;flex-direction:column;overflow:hidden;}
+  .dm-hd{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:58px 14px 8px;}
+  .dm-hd .back{width:24px;height:24px;color:var(--ink);flex:0 0 auto;}
+  .dm-hd .fav{width:36px;height:36px;border-radius:50%;overflow:hidden;background:#eee;flex:0 0 auto;}
+  .dm-hd .fav img{width:100%;height:100%;object-fit:cover;}
+  .dm-hd .who{flex:1;min-width:0;}
+  .dm-hd .who .n{font-size:15px;font-weight:700;line-height:1.1;}
+  .dm-hd .who .s{font-size:11px;color:var(--ink-2);}
+  .dm-hd .acts{display:flex;align-items:center;gap:15px;color:var(--ink);padding-right:1px;}
+  .dm-hd .acts svg{width:22px;height:22px;overflow:visible;}
+  .dm-profile-meta{flex:0 0 auto;text-align:center;font-size:12px;font-weight:700;color:var(--ink-2);padding:2px 0 10px;border-bottom:1px solid var(--divider);}
+  .dm-body{flex:1;overflow-y:auto;padding:16px 14px 14px;display:flex;flex-direction:column;gap:6px;background:#fff;}
+  .dm-body::-webkit-scrollbar{display:none;}
+  .dm.selecting .dm-composer{padding-bottom:25px;}
+  .dm.selecting .dm-input{display:none;}
+  .dm.selecting .dm-quick{margin-bottom:6px;}
+  .dm-day{align-self:center;font-size:11px;color:var(--ink-3);margin:2px 0 6px;}
+  /* group spacing: a new speaker turn gets a little more air above it */
+  .mrow.turn{margin-top:7px;}
+
+  /* row wrapper carries the select circle; the bubble itself matches玩法A exactly */
+  .mrow{display:flex;align-items:flex-end;gap:9px;transition:background .15s;padding:1px 2px;border-radius:12px;}
+  .mrow.out{flex-direction:row-reverse;}
+  .dm.selecting .mrow{cursor:pointer;}
+  .dm.selecting .mrow.sel{background:transparent;}
+  .mrow .sc{width:22px;height:22px;border-radius:50%;border:2px solid var(--ink-3);flex:0 0 auto;margin-bottom:5px;
+    display:none;align-items:center;justify-content:center;color:#fff;transition:transform .15s,background .15s,border-color .15s;}
+  .dm.selecting .mrow .sc{display:flex;}
+  .mrow.sel .sc{background:var(--tt-red);border-color:var(--tt-red);transform:scale(1.06);}
+  .mrow .sc svg{width:13px;height:13px;opacity:0;transition:opacity .15s;}
+  .mrow.sel .sc svg{opacity:1;}
+  .mcol{display:flex;flex-direction:column;gap:4px;max-width:78%;}
+  .mrow.in .mcol{align-items:flex-start;}
+  .mrow.out .mcol{align-items:flex-end;}
+
+  /* bubble tokens: uniform 15px, gray in / purple out */
+  .msg{font-size:15px;line-height:1.35;padding:9px 13px;border-radius:18px;animation:msgin .32s ease both;word-wrap:break-word;}
+  @keyframes msgin{from{opacity:0;transform:translateY(8px) scale(.96);}to{opacity:1;transform:none;}}
+  .mrow.in .msg{background:#F1F1F2;color:var(--ink);border-bottom-left-radius:6px;}
+  .mrow.out .msg{background:var(--chat-purple);color:#fff;border-bottom-right-radius:6px;}
+  /* consecutive same-side bubbles: tighten the inner corners (iMessage-style grouping) */
+  .mrow.in.cont .msg{border-top-left-radius:6px;}
+  .mrow.out.cont .msg{border-top-right-radius:6px;}
+  /* "对方正在输入…" 三点气泡（真实聊天节奏） */
+  .typing{align-self:flex-start;background:#F1F1F2;border-radius:18px;border-bottom-left-radius:6px;padding:12px 15px;display:inline-flex;gap:4px;animation:msgin .3s ease both;}
+  .typing i{width:7px;height:7px;border-radius:50%;background:#B8B9BE;display:inline-block;animation:typedot 1.2s infinite ease-in-out;}
+  .typing i:nth-child(2){animation-delay:.18s;} .typing i:nth-child(3){animation-delay:.36s;}
+  @keyframes typedot{0%,60%,100%{transform:translateY(0);opacity:.5;}30%{transform:translateY(-4px);opacity:1;}}
+
+  .dm-composer{flex:0 0 auto;background:#fff;padding:7px 12px 25px;border-top:1px solid var(--divider);}
+  .dm-quick{display:flex;gap:7px;overflow-x:auto;margin-bottom:8px;}
+  .dm-quick::-webkit-scrollbar{display:none;}
+  .quick-chip{height:32px;min-width:48px;padding:0 14px;border-radius:18px;background:#F1F1F2;display:flex;align-items:center;justify-content:center;
+    font-size:20px;white-space:nowrap;flex:0 0 auto;}
+  .quick-chip.ai{font-size:12px;font-weight:800;gap:5px;color:var(--ink);padding:0 10px;}
+  .quick-chip.ai .pair{width:31px;height:23px;position:relative;display:block;}
+  .quick-chip.ai .pair img{position:absolute;top:1px;width:21px;height:21px;border-radius:50%;object-fit:cover;border:1.5px solid #F1F1F2;background:#aaa;}
+  .quick-chip.ai .pair img:first-child{left:0}.quick-chip.ai .pair img:last-child{right:0;}
+  .quick-chip.text-music{border:0;font:800 12px/1 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+    gap:6px;color:var(--tt-red);padding:0 10px;cursor:pointer;-webkit-tap-highlight-color:transparent;
+    overflow:hidden;transition:transform .12s;}
+  .quick-chip.text-music svg{width:17px;height:17px;color:var(--tt-red);}
+  .quick-chip.text-music:focus-visible{outline:2px solid var(--tt-red);outline-offset:2px;}
+  .dm.selecting .quick-chip.text-music{background:var(--tt-red);color:#fff;}
+  .dm.selecting .quick-chip.text-music svg{color:#fff;}
+  .dm.selecting .quick-chip.text-music.ready{
+    background:
+      radial-gradient(circle at 16% 30%,rgba(255,155,233,.92) 0 8%,transparent 28%),
+      radial-gradient(circle at 78% 68%,rgba(138,18,178,.76) 0 8%,transparent 26%),
+      linear-gradient(110deg,#E60051 4%,#FF176F 32%,#FF4788 62%,#FF9BE9 82%,#E60051 100%);
+    background-size:180% 180%,190% 190%,240% 100%;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.24);
+    animation:textMusicReady 1.8s ease-in-out infinite alternate;
+  }
+  @keyframes textMusicReady{
+    from{background-position:0% 20%,100% 80%,0% 50%;}
+    to{background-position:100% 80%,0% 20%,100% 50%;}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .dm.selecting .quick-chip.text-music.ready{animation:none;}
+  }
+  .dm-input{display:flex;align-items:center;gap:9px;}
+  .dm-input .camera{width:38px;height:38px;border-radius:50%;background:#050505;color:#fff;display:flex;align-items:center;justify-content:center;flex:0 0 auto;}
+  .dm-input .camera svg{width:22px;height:22px;}
+  .dm-input .field{flex:1;height:42px;border-radius:22px;background:var(--field);display:flex;align-items:center;padding:0 8px 0 15px;font-size:15px;color:var(--ink-2);gap:10px;}
+  .dm-input .field .placeholder{flex:1;}
+  .dm-input .field svg{width:24px;height:24px;color:#000;flex:0 0 auto;}
+
+  /* TT 长按：上方反应条 + 下方操作菜单 */
+  .reacttray{position:absolute;z-index:32;width:300px;background:rgba(255,255,255,.96);backdrop-filter:blur(22px);border-radius:18px;
+    box-shadow:0 12px 40px rgba(0,0,0,.20);opacity:0;transform:scale(.94);pointer-events:none;overflow:hidden;}
+  .reacttray.show{opacity:1!important;transform:none!important;pointer-events:auto;}
+  .react-tabs{height:38px;display:flex;justify-content:center;padding:5px 10px 0;}
+  .react-tabs .tab{height:30px;min-width:76px;padding:0 12px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--ink-2);cursor:pointer;}
+  .react-tabs .tab.on{background:#F1F1F2;color:var(--ink);}
+  .react-items{height:64px;display:flex;align-items:center;gap:11px;padding:5px 13px 11px;overflow-x:auto;}
+  .react-items::-webkit-scrollbar{display:none;}
+  .react-item{width:40px;height:40px;flex:0 0 40px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:27px;cursor:pointer;position:relative;}
+  .react-item.avatar{border-radius:50%;overflow:visible;background:#E8E8EA;box-shadow:0 0 0 1px rgba(22,24,35,.08);}
+  .react-item.avatar img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;}
+  .react-item.avatar .avatar-mood{position:absolute;right:-4px;bottom:-4px;width:18px;height:18px;border-radius:50%;background:#fff;
+    display:grid;place-items:center;font-size:12px;box-shadow:0 1px 4px rgba(0,0,0,.22);}
+  .ctx{position:absolute;z-index:31;background:rgba(250,250,250,.96);backdrop-filter:blur(18px);border-radius:14px;
+    box-shadow:0 12px 40px rgba(0,0,0,.22);overflow:hidden;opacity:0;transform:scale(.9);transform-origin:top center;
+    pointer-events:none;min-width:212px;}
+  .ctx.show{opacity:1!important;transform:scale(1)!important;pointer-events:auto;}
+  .ctx .ci{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 15px;font-size:16px;color:var(--ink);cursor:pointer;}
+  .ctx .ci+.ci{border-top:1px solid rgba(0,0,0,.07);}
+  .ctx .ci.hot{color:var(--tt-red);font-weight:700;}
+  .ctx .ci svg{width:19px;height:19px;}
+
+  /* Selection status stays inside the existing DM composer. */
+  .genbar{min-height:34px;padding:0 4px 0 11px;border-radius:17px;background:#F1F1F2;display:none;align-items:center;gap:12px;}
+  .genbar.show{display:flex;}
+  .genbar .cnt{font-size:13px;color:var(--ink-2);flex:1;}
+  .genbar .cnt b{color:var(--ink);font-size:15px;}
+  .genbar .cancel{border:0;background:transparent;font:700 13px/1 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif;
+    color:var(--ink-2);padding:9px 10px;cursor:pointer;}
+
+  /* ============================================================
+     生成动画 (AI 谱曲)
+     ============================================================ */
+  .genview{position:absolute;inset:0;z-index:40;background:#650846;color:#fff;overflow:hidden;display:none;}
+  .genview.show{display:flex;opacity:1!important;}
+  .genview::after{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+    background:
+      radial-gradient(circle at 50% 48%,rgba(73,0,42,.04),rgba(73,0,42,.14) 68%,rgba(38,0,28,.24) 100%),
+      linear-gradient(180deg,rgba(54,0,39,.04),transparent 28%,transparent 72%,rgba(54,0,39,.12));}
+  .gen-gradient{position:absolute;inset:-20%;z-index:0;overflow:hidden;background:#760A52;filter:saturate(108%) brightness(1.15);}
+  .gen-gradient i{position:absolute;border-radius:50%;filter:blur(52px);opacity:.92;will-change:transform;}
+  .gen-gradient .g1{width:70%;height:62%;left:-8%;top:-2%;background:#E60051;animation:meshA 3.8s ease-in-out infinite alternate;}
+  .gen-gradient .g2{width:62%;height:58%;right:-5%;top:8%;background:#FF4788;animation:meshB 4.4s ease-in-out infinite alternate;}
+  .gen-gradient .g3{width:67%;height:62%;left:16%;bottom:-8%;background:#FF9BE9;animation:meshC 5s ease-in-out infinite alternate;}
+  .gen-gradient .g4{width:32%;height:30%;right:2%;bottom:4%;background:#8A12B2;opacity:.34;animation:meshD 4.1s ease-in-out infinite alternate;}
+  @keyframes meshA{0%{transform:translate(-14%,-12%) scale(.92)}55%{transform:translate(46%,24%) scale(1.24)}100%{transform:translate(20%,58%) scale(.84)}}
+  @keyframes meshB{0%{transform:translate(18%,-12%) scale(1.14)}50%{transform:translate(-52%,34%) scale(.82)}100%{transform:translate(-18%,64%) scale(1.28)}}
+  @keyframes meshC{0%{transform:translate(-28%,28%) scale(.86)}50%{transform:translate(42%,-38%) scale(1.26)}100%{transform:translate(10%,-68%) scale(.94)}}
+  @keyframes meshD{0%{transform:translate(28%,26%) scale(1.18)}55%{transform:translate(-64%,-26%) scale(.78)}100%{transform:translate(-20%,-68%) scale(1.28)}}
+  .gen-back{position:absolute;z-index:3;left:18px;top:86px;width:26px;height:26px;color:#fff;}
+  .gen-focus{position:absolute;z-index:3;left:28px;right:28px;top:250px;display:flex;flex-direction:column;align-items:center;text-align:center;}
+  .gen-kicker{font-size:9px;font-weight:800;letter-spacing:1.7px;color:rgba(255,255,255,.72);margin-bottom:10px;}
+  .gen-percent{display:block;margin-bottom:17px;}
+  .gen-percent strong{font-size:48px;line-height:1;letter-spacing:-2px;font-weight:760;text-shadow:0 8px 30px rgba(92,0,51,.28);transition:opacity .2s,transform .2s;}
+  .gen-avatar-pair{display:flex;align-items:center;justify-content:center;margin-bottom:18px;padding-left:18px;}
+  .gen-avatar-pair img{width:68px;height:68px;border-radius:50%;object-fit:cover;border:3px solid #fff;background:#8B6C64;
+    box-shadow:0 10px 28px rgba(92,0,51,.26);}
+  .gen-avatar-pair img+img{margin-left:-18px;}
+  .gen-status{font-size:15px;font-weight:700;letter-spacing:-.1px;color:rgba(255,255,255,.94);transition:opacity .2s,transform .2s;}
+  .gen-bottom{position:absolute;z-index:3;left:50%;transform:translateX(-50%);bottom:34px;height:38px;border-radius:20px;border:1px solid rgba(255,255,255,.22);
+    background:rgba(255,255,255,.12);backdrop-filter:blur(18px);padding:0 15px;color:rgba(255,255,255,.86);
+    display:flex;align-items:center;gap:9px;font-size:12px;font-weight:700;white-space:nowrap;}
+  .gen-bottom::before{content:"";width:7px;height:7px;border-radius:50%;background:#fff;box-shadow:0 0 12px rgba(255,255,255,.9);animation:genPulse 1.2s ease-in-out infinite;}
+  @keyframes genPulse{50%{opacity:.35;transform:scale(.7)}}
+
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+  /* ============================================================ 成片预览 ============================================================ */
+  .songview{position:absolute;inset:0;z-index:44;background:#000;color:#fff;overflow:hidden;display:none;}
+  .songview.show{display:block;opacity:1!important;}
+  .movie-stage{position:absolute;inset:0;background:#000;overflow:hidden;display:flex;align-items:center;justify-content:center;}
+  .songview .movie-stage{top:56px;bottom:94px;border-radius:18px;}
+  .final-video{display:block;width:100%;height:100%;object-fit:contain;background:#000;}
+  .preview-header-shade{position:absolute;z-index:2;left:0;right:0;top:56px;height:120px;pointer-events:none;
+    background:linear-gradient(180deg,rgba(0,0,0,.58),rgba(0,0,0,.14) 68%,transparent);border-radius:18px 18px 0 0;}
+  .preview-top{position:absolute;z-index:4;left:16px;right:8px;top:72px;height:38px;display:grid;
+    grid-template-columns:36px 1fr 36px;align-items:center;color:#fff;text-shadow:0 1px 5px rgba(0,0,0,.72);}
+  .preview-top .back{width:24px;height:24px;cursor:pointer;justify-self:start;filter:drop-shadow(0 1px 4px rgba(0,0,0,.48));}
+  .preview-top .sound-pill{justify-self:center;height:34px;padding:0 13px;border-radius:18px;background:rgba(22,24,35,.58);
+    display:flex;align-items:center;gap:7px;font-size:14px;font-weight:700;backdrop-filter:blur(12px);}
+  .preview-top .sound-pill svg{width:17px;height:17px;}
+  .preview-top .settings{justify-self:end;width:30px;height:30px;display:flex;align-items:center;justify-content:center;}
+  .preview-top .settings svg{width:30px;height:30px;overflow:visible;}
+  .editor-rail{position:absolute;z-index:4;right:6px;top:126px;display:flex;flex-direction:column;align-items:center;
+    justify-content:flex-start;gap:13px;color:#fff;filter:drop-shadow(0 1px 4px rgba(0,0,0,.72));}
+  .editor-tool{width:40px;height:36px;flex:0 0 36px;display:flex;align-items:center;justify-content:center;line-height:1;}
+  .editor-tool svg{width:32px;height:32px;overflow:visible;}
+  .editor-tool.text{font-family:Arial,sans-serif;font-size:28px;font-weight:500;letter-spacing:-1.5px;}
+  .editor-tool.down svg{width:26px;height:26px;}
+  .editor-sep{width:25px;height:1px;background:rgba(255,255,255,.55);}
+  .autocut-pill{position:absolute;z-index:4;left:50%;bottom:112px;transform:translateX(-50%);height:36px;padding:0 14px;
+    border-radius:19px;background:rgba(22,24,35,.56);backdrop-filter:blur(10px);display:flex;align-items:center;gap:7px;
+    color:#fff;font-size:13px;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.5);}
+  .autocut-pill svg{width:18px;height:18px;}
+  .editor-bottom{position:absolute;z-index:4;left:12px;right:12px;bottom:31px;height:46px;display:flex;gap:8px;}
+  .editor-bottom button{border:0;height:46px;border-radius:23px;font-size:15px;font-weight:700;cursor:pointer;}
+  .story-btn{flex:1;background:#fff;color:var(--ink);display:flex;align-items:center;justify-content:center;gap:8px;}
+  .story-avatar{width:28px;height:28px;border-radius:50%;display:block;overflow:hidden;background:#6552AE;
+    border:2px solid #fff;box-shadow:0 0 0 2px var(--tt-cyan);}
+  .story-avatar img{width:100%;height:100%;object-fit:cover;display:block;}
+  .next-btn{flex:1;background:var(--tt-red);color:#fff;}
+
+  /* ============================================================ 视频投稿页 ============================================================ */
+  .postview{position:absolute;inset:0;z-index:48;background:#fff;color:var(--ink);overflow:hidden;display:none;}
+  .postview.show{display:block;opacity:1!important;}
+  .post-back{position:absolute;z-index:2;left:18px;top:68px;width:27px;height:27px;cursor:pointer;}
+  .post-compose{position:absolute;left:18px;right:18px;top:108px;height:232px;border-bottom:1px solid rgba(22,24,35,.08);}
+  .post-description{position:absolute;left:0;top:8px;right:132px;color:var(--ink);font-size:16px;font-weight:500;line-height:1.35;}
+  .publish-thumb{position:absolute;right:0;top:0;width:112px;height:158px;border-radius:9px;overflow:hidden;background:#000;}
+  .publish-thumb .final-video{object-fit:cover;}
+  .thumb-preview{position:absolute;z-index:2;left:8px;top:7px;color:#fff;font-size:10px;font-weight:800;text-shadow:0 1px 3px #000;}
+  .edit-cover{position:absolute;left:6px;right:6px;bottom:7px;height:29px;border-radius:15px;background:rgba(0,0,0,.58);color:#fff;
+    z-index:2;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;backdrop-filter:blur(8px);}
+  .post-chips{position:absolute;left:0;bottom:18px;display:flex;gap:8px;}
+  .post-chip{height:32px;padding:0 12px;border-radius:8px;background:#F1F1F2;display:flex;align-items:center;font-size:14px;font-weight:700;}
+  .post-options{position:absolute;left:0;right:0;top:340px;border-top:1px solid rgba(22,24,35,.06);}
+  .post-row{height:62px;padding:0 18px;display:flex;align-items:center;gap:13px;border-bottom:1px solid rgba(22,24,35,.06);font-size:15px;font-weight:600;}
+  .post-row.location{height:80px;}
+  .post-row .row-icon{width:22px;height:22px;flex:0 0 auto;}
+  .post-row .row-copy{display:flex;flex-direction:column;gap:6px;}
+  .post-row .row-title{display:flex;align-items:center;gap:6px;}
+  .post-row .info{width:14px;height:14px;color:#8A8B91;}
+  .post-row .sub{color:#8A8B91;font-size:13px;font-weight:500;}
+  .post-row .chev{width:14px;height:14px;margin-left:auto;transform:rotate(180deg);color:#8A8B91;}
+  .post-actions{position:absolute;left:12px;right:12px;bottom:31px;height:48px;display:flex;gap:8px;}
+  .post-actions button{border:0;border-radius:24px;font-size:16px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;}
+  .post-actions button svg{width:20px;height:20px;}
+  .draft-btn{flex:1;background:#F1F1F2;color:var(--ink);}
+  .publish-btn{flex:1;background:var(--tt-red);color:#fff;}
+
+  /* ============================================================
+     投稿后的 TikTok Feed：同一成片继续播放并获得互动
+     ============================================================ */
+  .feedview{position:absolute;inset:0;z-index:50;background:#000;color:#fff;overflow:hidden;display:none;}
+  .feedview.show{display:block;opacity:1!important;}
+  .feed-shade{position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.38),transparent 23%,transparent 60%,rgba(0,0,0,.72));}
+  .feed-top{position:absolute;top:58px;left:0;right:0;z-index:20;display:flex;align-items:center;justify-content:center;gap:15px;
+    padding:0 58px 0 44px;font-size:15px;font-weight:600;color:rgba(255,255,255,.62);white-space:nowrap;text-shadow:0 1px 4px rgba(0,0,0,.55);}
+  .feed-top .live{position:absolute;left:16px;display:flex;flex-direction:column;align-items:center;font-size:9px;font-weight:800;gap:2px;letter-spacing:.5px;color:#fff;}
+  .feed-top .live svg{width:20px;height:20px;}
+  .feed-top .search{position:absolute;right:14px;width:24px;height:24px;color:#fff;}
+  .feed-top .active{color:#fff;position:relative}.feed-top .active::after{content:"";position:absolute;left:20%;right:20%;bottom:-7px;height:3px;border-radius:2px;background:#fff;}
+  .feed-rail{position:absolute;right:8px;bottom:92px;z-index:20;display:flex;flex-direction:column;align-items:center;gap:18px;}
+  .feed-rail .item{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:13px;font-weight:600;text-shadow:0 1px 4px #000;}
+  .feed-rail .item svg{width:33px;height:33px;filter:drop-shadow(0 1px 3px rgba(0,0,0,.45));}
+  .feed-rail .item.liked svg{color:var(--tt-red);}
+  .feed-avatar-wrap{position:relative;margin-bottom:16px;}
+  .feed-avatar{width:48px;height:48px;border-radius:50%;overflow:hidden;border:2px solid #fff;background:#222;}
+  .feed-avatar img{width:100%;height:100%;object-fit:cover;}
+  .feed-follow{position:absolute;left:50%;bottom:-11px;transform:translateX(-50%);width:22px;height:22px;border-radius:50%;
+    background:var(--tt-red);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.28);}
+  .feed-follow svg{width:11px!important;height:11px!important;filter:none!important;}
+  .feed-disc{width:46px;height:46px;border-radius:50%;background:radial-gradient(circle,#4a4a4a 0 29%,#111 31% 43%,#303030 45% 49%,#111 51%);
+    border:3px solid #1a1a1a;display:grid;place-items:center;animation:spin 4s linear infinite;margin-top:2px;}
+  .feed-disc img{width:27px;height:27px;border-radius:50%;object-fit:cover;display:block;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .feed-cap{position:absolute;left:14px;right:72px;bottom:95px;text-shadow:0 1px 4px rgba(0,0,0,.7);}
+  .feed-cap .user{font-size:16px;font-weight:700;margin-bottom:6px}.feed-cap .copy{font-size:14px;line-height:1.35;}
+  .feed-cap .sound{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;margin-top:8px;}
+  .feed-cap .sound svg{width:13px;height:13px;}
+  .feed-tabs{position:absolute;left:0;right:0;bottom:0;height:82px;background:#000;display:flex;justify-content:space-around;padding:9px 6px 0;}
+  .feed-tabs .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;font-weight:600;color:rgba(255,255,255,.5);}
+  .feed-tabs .tab.active{color:#fff}.feed-tabs svg{width:25px;height:25px;}
+  .feed-tabs .plus-wrap{position:relative;width:46px;height:30px;display:flex;align-items:center;justify-content:center;}
+  .feed-tabs .plus{position:relative;width:44px;height:30px;border-radius:9px;background:#fff;color:#000;display:flex;align-items:center;justify-content:center;z-index:2;}
+  .feed-tabs .plus svg{width:18px;height:18px;}
+  .feed-tabs .plus-wrap::before{content:"";position:absolute;left:2px;top:0;width:44px;height:30px;border-radius:9px;background:var(--tt-cyan);}
+  .feed-tabs .plus-wrap::after{content:"";position:absolute;right:2px;top:0;width:44px;height:30px;border-radius:9px;background:var(--tt-red);}
+  .float-heart{position:absolute;right:34px;bottom:158px;color:var(--tt-red);opacity:0;pointer-events:none;animation:heartUp 1.5s ease-out forwards;}
+  .float-heart svg{width:24px;height:24px;}
+  @keyframes heartUp{10%{opacity:1}100%{opacity:0;transform:translate(-30px,-240px) scale(1.45)}}
+
+  .toast{position:absolute;top:120px;left:50%;transform:translateX(-50%) translateY(-10px);z-index:80;
+    background:rgba(0,0,0,.82);color:#fff;font-size:13px;font-weight:600;padding:9px 16px;border-radius:20px;
+    opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;white-space:nowrap;max-width:82%;text-align:center;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  /* ============================================================ 控制面板 ============================================================ */
+  .panel{width:262px;color:#eaeaea;}
+  .panel h1{font-size:15px;margin:0 0 4px;font-weight:700;letter-spacing:.3px;}
+  .panel .sub{font-size:12px;color:#9aa0aa;margin-bottom:16px;line-height:1.5;}
+  .panel .big{width:100%;padding:14px;border:0;border-radius:14px;background:var(--tt-red);color:#fff;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 8px 22px rgba(254,44,85,.35);}
+  .panel .big:active{transform:translateY(1px);}
+  .panel .row{display:flex;gap:8px;margin-top:10px;}
+  .panel .row button{flex:1;padding:10px;border:1px solid #3a3d44;border-radius:10px;background:#1d1f24;color:#cfd3da;font-size:12px;font-weight:600;cursor:pointer;}
+  .panel .row button:hover{border-color:#5a5e66;}
+  .panel button:disabled{opacity:.45;cursor:default;transform:none;}
+  .panel .mute{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:12px;color:#9aa0aa;cursor:pointer;user-select:none;}
+  .panel .mute .sw{width:34px;height:20px;border-radius:12px;background:#3a3d44;position:relative;transition:background .2s;flex:0 0 auto;}
+  .panel .mute .sw i{position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s;}
+  .panel .mute.on .sw{background:var(--tt-red);}
+  .panel .mute.on .sw i{left:16px;}
+  .panel .steps{margin-top:16px;font-size:12px;line-height:1.7;color:#9aa0aa;}
+  .panel .steps .s{display:flex;gap:8px;align-items:flex-start;padding:3px 5px;border-radius:8px;cursor:pointer;transition:background .15s,color .15s;}
+  .panel .steps .s:hover{background:rgba(255,255,255,.06);color:#fff;}
+  .panel .steps .s .d{width:18px;height:18px;border-radius:50%;background:#2a2d34;color:#9aa0aa;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:0 0 auto;margin-top:2px;}
+  .panel .steps .s.on{color:#fff;}
+  .panel .steps .s.on .d{background:var(--tt-red);color:#fff;}
+  .panel .tip{margin-top:14px;font-size:11px;color:#71767f;line-height:1.6;border-top:1px solid #262930;padding-top:12px;}
+  .panel .tip b{color:#aab;}
+.toast,
+.toast.show{
+  display:none!important;
+}
+</style>
+</head>
+<body>
+  <div id="root" style="display:none!important"></div>
+  <!-- ============ ICON DEFS ============ -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></symbol>
+    <symbol id="i-cmt" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3C6.2 3 1.6 6.7 1.6 11.2c0 2.4 1.3 4.5 3.3 6-.2 1.3-.8 2.7-1.9 3.9 2-.2 3.9-.9 5.3-2 1.1.3 2.3.4 3.7.4 5.8 0 10.4-3.7 10.4-8.3S17.8 3 12 3z"/><circle cx="8.5" cy="11.5" r="1.15" fill="#000"/><circle cx="12" cy="11.5" r="1.15" fill="#000"/><circle cx="15.5" cy="11.5" r="1.15" fill="#000"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path fill="currentColor" d="M13.5 2.5l8 7-8 7v-3.9c-5 0-8.4 1.3-11 4.4.6-5.7 3.7-9.6 11-10.4V2.5z"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path fill="currentColor" d="M6 2h12a1 1 0 0 1 1 1v18.4a.5.5 0 0 1-.77.42L12 18.1l-6.23 3.72A.5.5 0 0 1 5 21.4V3a1 1 0 0 1 1-1z"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3l9 8.2h-2.6V21h-4.9v-5.6h-3V21H5.6v-9.8H3z"/></symbol>
+    <symbol id="i-friends" viewBox="0 0 24 24"><path fill="currentColor" d="M9 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm7.2 0a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4zM2 20c0-3.4 3.1-6 7-6s7 2.6 7 6v1H2v-1zm15.2-5.9c2.7.3 4.8 2.4 4.8 5.1V21h-4.2v-1c0-2-.7-3.8-2-5.2.5-.1.9-.2 1.4-.2z"/></symbol>
+    <symbol id="i-inbox" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M4 5.5h16v11.5H8.5L4 21z"/></symbol>
+    <symbol id="i-profile" viewBox="0 0 24 24"><path fill="currentColor" d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zm0 2c-5 0-9 2.6-9 5.9V21h18v-1.1c0-3.3-4-5.9-9-5.9z"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path fill="currentColor" d="M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" d="M10.5 4a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM20 20l-4.2-4.2"/></symbol>
+    <symbol id="i-live" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M4 6.5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-10a2 2 0 0 1 2-2zM8.5 2.8L12 6.3l3.5-3.5"/><path fill="currentColor" stroke="none" d="M10 10l5.2 3-5.2 3z"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M5 5l14 14M19 5L5 19"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path fill="currentColor" d="M7 4l13 8-13 8z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path fill="currentColor" d="M7 4h4v16H7zM13 4h4v16h-4z"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M15 5l-7 7 7 7"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><path fill="currentColor" d="M6.6 2.5c.6 0 1.1.4 1.3 1l1 3.3c.2.6 0 1.2-.5 1.6L8 9.7c1 2.1 2.2 3.3 4.3 4.3l1.3-1.4c.4-.5 1-.6 1.6-.5l3.3 1c.6.2 1 .7 1 1.3v3.2c0 .8-.6 1.5-1.5 1.5C9.5 19.6 4.4 14.5 4 5.5 4 3.6 4.7 2.5 5.5 2.5z"/></symbol>
+    <symbol id="i-video" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M3 7.5h11v9H3zM14 11l6-3.5v9L14 13z"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 20 15" fill="currentColor"><path d="M10 1.9c3.02 0 5.79 1.09 7.9 2.9.24.2.26.56.05.79l-1.06 1.13c-.2.2-.5.22-.72.03A9.9 9.9 0 0 0 10 4.35 9.9 9.9 0 0 0 3.83 6.74c-.22.19-.53.17-.72-.03L2.05 5.58a.55.55 0 0 1 .05-.79A12.34 12.34 0 0 1 10 1.9z"/><path d="M10 6.35c1.85 0 3.55.65 4.88 1.74.23.19.25.53.04.75l-1.1 1.16c-.19.2-.5.22-.72.05A5.36 5.36 0 0 0 10 8.75a5.36 5.36 0 0 0-3.1.95c-.22.17-.53.15-.72-.05L5.08 8.84a.53.53 0 0 1 .04-.75A7.66 7.66 0 0 1 10 6.35z"/><path d="M10 10.7c.72 0 1.38.24 1.9.65.25.19.27.55.05.78l-1.5 1.57a.62.62 0 0 1-.9 0l-1.5-1.57a.53.53 0 0 1 .05-.78c.52-.41 1.18-.65 1.9-.65z"/></symbol>
+    <symbol id="i-loc" viewBox="0 0 24 24"><path fill="currentColor" d="M21 3L3 10.5l7.2 2.6a1 1 0 0 1 .6.6L13.5 21z"/></symbol>
+    <symbol id="i-music" viewBox="0 0 24 24"><path fill="currentColor" d="M20 3l-11 2.2v10.1A3.6 3.6 0 1 0 11 18V9.3l7-1.4v5.1A3.6 3.6 0 1 0 20 15z"/></symbol>
+    <symbol id="i-sparkle" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2l1.8 5.4L19 9l-5.2 1.6L12 16l-1.8-5.4L5 9l5.2-1.6z"/><path fill="currentColor" d="M18.5 14l.9 2.6L22 17.5l-2.6.9L18.5 21l-.9-2.6L15 17.5l2.6-.9z"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" d="M6 11a6 6 0 0 0 12 0M12 17v3.5M9 20.5h6"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M9 9h11v11H9zM4 15V4h11"/></symbol>
+    <symbol id="i-reply" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" d="M10 9V5l-7 7 7 7v-4c5 0 9 1 11 4 0-7-4-10-11-10z"/></symbol>
+    <symbol id="i-swap" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" d="M4 8h13l-3-3M20 16H7l3 3"/></symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24"><path fill="currentColor" d="M7.2 5.5l1.2-2h7.2l1.2 2H20a2 2 0 0 1 2 2V19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7.5a2 2 0 0 1 2-2h3.2z"/><circle cx="12" cy="13" r="4.4" fill="#050505"/><circle cx="12" cy="13" r="2.7" fill="none" stroke="#fff" stroke-width="1.4"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="2.5" y="3" width="19" height="18" rx="3" fill="currentColor"/><circle cx="8" cy="9" r="2" fill="#fff"/><path d="M4.5 18l5-5 3.2 3.2 2.7-3 4.1 4.8z" fill="#fff"/></symbol>
+    <symbol id="i-emoji" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" fill="currentColor"/><circle cx="8.7" cy="10" r="1.2" fill="#fff"/><circle cx="15.3" cy="10" r="1.2" fill="#fff"/><path d="M7.5 14.2c1.2 2 2.7 3 4.5 3s3.3-1 4.5-3" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" d="M5.5 21V4m.5 1h11.8l-2.2 3.6 2.2 3.6H6"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="19" cy="12" r="1.8" fill="currentColor"/></symbol>
+  </defs></svg>
+
+  <button class="start-gate" id="startGate" type="button" aria-label="Start demo">
+    <span class="gate-content"><span class="gate-play"><svg><use href="#i-play"/></svg></span>Start demo<small>Tap to enable sound</small></span>
+  </button>
+
+  <!-- ============ CONTROL PANEL ============ -->
+  <div class="panel">
+    <h1>TT · 唱聊天记录 · 直接八卦版</h1>
+    <div class="sub">在 DM 快捷栏点击 Text to music，直接圈选一段 drama 对话，让 AI 谱成歌并进入 TikTok 编辑、投稿与 Feed。</div>
+    <button class="big" id="play">▶ 播放完整流程</button>
+    <div class="row"><button id="replay">↺ 重播</button><button id="reset">⟲ 回到聊天</button></div>
+    <div class="mute" id="muteToggle"><span class="sw"><i></i></span><span id="muteLbl">聊天界面静音（推荐）</span></div>
+    <div class="steps" id="steps">
+      <div class="s" data-i="0"><span class="d">1</span><span>bestie 报料：疑似撞见你男朋友 👀</span></div>
+      <div class="s" data-i="1"><span class="d">2</span><span>Text to music → 多选 BRO 到反转揭晓</span></div>
+    <div class="s" data-i="2"><span class="d">3</span><span>再次点 Text to music → 开始生成</span></div>
+      <div class="s" data-i="3"><span class="d">4</span><span>动态弥散光生成过场</span></div>
+      <div class="s" data-i="4"><span class="d">5</span><span>🎵 对话变歌词（成品预览）</span></div>
+      <div class="s" data-i="5"><span class="d">6</span><span>视频投稿页（Edit cover / Post）</span></div>
+      <div class="s" data-i="6"><span class="d">7</span><span>一键投稿 → Feed 互动增长 ✨</span></div>
+    </div>
+    <div class="tip">Text to music 直接在当前 DM 内开启多选；歌曲风格由玩法自动匹配，不提供手动选择。点击任一步骤可直接定位审查。</div>
+  </div>
+
+  <!-- ============ PHONE ============ -->
+  <div class="stage"><div class="phone">
+    <div class="island"></div>
+    <div class="screen" id="screen">
+      <div class="status dark" id="statusbar">
+        <div class="l"><span id="clock">21:53</span><svg class="loc"><use href="#i-loc"/></svg></div>
+        <div class="r"><div class="bars"><i></i><i></i><i></i><i></i></div><svg class="wifi"><use href="#i-wifi"/></svg><div class="batt"><span class="cell"><i></i></span></div></div>
+      </div>
+
+      <!-- ---------- DM ---------- -->
+      <div class="dm" id="dm">
+        <div class="dm-hd">
+          <svg class="back"><use href="#i-chevron"/></svg>
+          <div class="fav"><img id="dmFav" alt=""></div>
+          <div class="who"><div class="n" id="dmName">bestie 💗</div><div class="s">Active now</div></div>
+          <div class="acts" aria-label="Conversation actions"><svg><use href="#i-flag"/></svg><svg><use href="#i-more"/></svg></div>
+        </div>
+        <div class="dm-profile-meta">9 Following · 0 Followers</div>
+        <div class="dm-body" id="dmBody"><div class="dm-day">Today</div></div>
+        <div class="dm-composer" id="dmInput">
+          <div class="dm-quick">
+            <div class="quick-chip">❤️</div><div class="quick-chip">😂</div>
+            <div class="quick-chip ai"><span class="pair"><img id="quickMe" alt=""><img id="quickFriend" alt=""></span>AI Together</div>
+            <button class="quick-chip text-music" id="textToMusic" type="button" aria-pressed="false"><svg><use href="#i-music"/></svg>Text to music</button>
+          </div>
+          <div class="genbar" id="genbar" aria-live="polite">
+            <div class="cnt"><b id="genCnt">0</b> <span id="genLabel">messages selected</span></div>
+            <button class="cancel" id="genCancel" type="button">Cancel</button>
+          </div>
+          <div class="dm-input">
+            <div class="camera"><svg><use href="#i-camera"/></svg></div>
+            <div class="field"><span class="placeholder">Message...</span><svg><use href="#i-image"/></svg><svg><use href="#i-emoji"/></svg></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 长按上下文菜单 -->
+      <div class="reacttray" id="reacttray">
+        <div class="react-tabs"><div class="tab on" data-react-tab="emoji">Emoji</div><div class="tab" data-react-tab="avatar">Avatar</div></div>
+        <div class="react-items" id="reactItems"></div>
+      </div>
+      <div class="ctx" id="ctx"></div>
+
+      <!-- ---------- 生成动画 ---------- -->
+      <div class="genview" id="genview">
+        <div class="gen-gradient"><i class="g1"></i><i class="g2"></i><i class="g3"></i><i class="g4"></i></div>
+        <svg class="gen-back"><use href="#i-chevron"/></svg>
+        <div class="gen-focus">
+          <div class="gen-kicker">CREATING YOUR SOUND</div>
+          <div class="gen-percent"><strong id="genPercent">8%</strong></div>
+          <div class="gen-avatar-pair"><img id="genMe" alt=""><img id="genFriend" alt=""></div>
+          <div class="gen-status" id="genStatus">Understanding your chat...</div>
+        </div>
+        <div class="gen-bottom" id="genSub">This usually takes a few seconds</div>
+      </div>
+
+      <!-- ---------- 成片预览 ---------- -->
+      <div class="songview" id="songview">
+        <div class="movie-stage" id="previewMovie">
+          <video class="final-video" id="song" src="./assets/1873425551008778.mp4" preload="auto" playsinline loop></video>
+        </div>
+        <div class="preview-header-shade"></div>
+        <div class="preview-top">
+          <svg class="back" id="svBack"><use href="#i-chevron"/></svg>
+          <div class="sound-pill"><svg><use href="#i-music"/></svg>Add sound</div>
+          <div class="settings">
+            <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <circle cx="16" cy="16" r="10.5"/>
+              <path d="M16 2.5v3M16 26.5v3M2.5 16h3M26.5 16h3M6.5 6.5l2.2 2.2M23.3 23.3l2.2 2.2M25.5 6.5l-2.2 2.2M8.7 23.3l-2.2 2.2"/>
+            </svg>
+          </div>
+        </div>
+        <div class="editor-rail">
+          <div class="editor-tool">
+            <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2.5 27.5C4.3 18.2 9.6 13.2 20 12.7V4.5l9.5 8.7-9.5 8.6v-6.1c-7.4.4-12.7 4.1-17.5 11.8z"/>
+            </svg>
+          </div>
+          <div class="editor-sep"></div>
+          <div class="editor-tool">
+            <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5" y="8.5" width="22" height="15" rx="3"/>
+              <path d="M9 12.5L5 16l4 3.5M23 12.5l4 3.5-4 3.5"/>
+              <path d="M11 10v12M21 10v12"/>
+            </svg>
+          </div>
+          <div class="editor-tool">
+            <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 4.5h13.5a3 3 0 0 1 3 3v14a3 3 0 0 1-3 3H23"/>
+              <rect x="4.5" y="7.5" width="19" height="21" rx="3.5"/>
+              <path d="M12 13.5l7 4.5-7 4.5z" fill="currentColor" stroke="none"/>
+            </svg>
+          </div>
+          <div class="editor-tool text">Aa</div>
+          <div class="editor-tool">
+            <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3.5" y="4" width="25" height="24" rx="6"/>
+              <path d="M10 18c1.6 2.3 3.6 3.4 6 3.4s4.4-1.1 6-3.4"/>
+              <circle cx="11" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="21" cy="12" r="1.2" fill="currentColor" stroke="none"/>
+            </svg>
+          </div>
+          <div class="editor-tool">
+            <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 3l1.7 5.3L18 10l-5.3 1.7L11 17l-1.7-5.3L4 10l5.3-1.7z"/>
+              <path d="M23 13l1.4 4.6L29 19l-4.6 1.4L23 25l-1.4-4.6L17 19l4.6-1.4z"/>
+              <path d="M10 23l.8 2.2L13 26l-2.2.8L10 29l-.8-2.2L7 26l2.2-.8z"/>
+            </svg>
+          </div>
+          <div class="editor-tool">
+            <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.3">
+              <circle cx="16" cy="10.5" r="6.5"/>
+              <circle cx="11.5" cy="19.5" r="6.5"/>
+              <circle cx="20.5" cy="19.5" r="6.5"/>
+            </svg>
+          </div>
+          <div class="editor-tool">
+            <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="12" y="4.5" width="8" height="14" rx="4"/>
+              <path d="M8.5 15.5v.8a7.5 7.5 0 0 0 15 0v-.8"/>
+              <path d="M16 23.8v4M11.8 27.8h8.4"/>
+            </svg>
+          </div>
+          <div class="editor-tool down">
+            <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12l8 8 8-8"/></svg>
+          </div>
+        </div>
+        <div class="autocut-pill"><svg><use href="#i-sparkle"/></svg>AutoCut</div>
+        <div class="editor-bottom">
+          <button class="story-btn"><span class="story-avatar"><img id="storyAvatar" alt=""></span>Your Story</button>
+          <button class="next-btn" id="previewNext">Next</button>
+        </div>
+      </div>
+
+      <!-- ---------- 视频投稿页 ---------- -->
+      <div class="postview" id="postview">
+        <svg class="post-back" id="postBack"><use href="#i-chevron"/></svg>
+        <div class="post-compose">
+          <div class="post-description">my bestie thought he was cheating 😭</div>
+          <div class="publish-thumb" id="publishMovie">
+            <span class="thumb-preview">Preview</span>
+            <span class="edit-cover">Edit cover</span>
+          </div>
+          <div class="post-chips">
+            <div class="post-chip"># Hashtags</div>
+            <div class="post-chip">@ Mention</div>
+          </div>
+        </div>
+        <div class="post-options">
+          <div class="post-row location">
+            <svg class="row-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 3.5a6.5 6.5 0 0 0-6.5 6.5c0 5.1 6.5 11.2 6.5 11.2s6.5-6.1 6.5-11.2A6.5 6.5 0 0 0 16 3.5z"/>
+              <circle cx="16" cy="10" r="2.3"/>
+              <path d="M9.5 21.8C5.8 22.6 3.5 24 3.5 25.6 3.5 27.8 9.1 29.5 16 29.5s12.5-1.7 12.5-3.9c0-1.6-2.3-3-6-3.8"/>
+            </svg>
+            <div class="row-copy">
+              <div class="row-title">Location
+                <svg class="info" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10" cy="10" r="7.5"/><path d="M10 8v5M10 5.5h.01"/></svg>
+              </div>
+              <span class="sub">Turn on location</span>
+            </div>
+            <svg class="chev"><use href="#i-chevron"/></svg>
+          </div>
+          <div class="post-row">
+            <svg class="row-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+              <rect x="5.5" y="5.5" width="21" height="21" rx="3.5"/><path d="M16 10.5v11M10.5 16h11"/>
+            </svg>
+            Add link <svg class="chev"><use href="#i-chevron"/></svg>
+          </div>
+          <div class="post-row">
+            <svg class="row-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <circle cx="16" cy="16" r="12"/><path d="M4.5 16h23M16 4c3 3.2 4.6 7.2 4.6 12S19 24.8 16 28c-3-3.2-4.6-7.2-4.6-12S13 7.2 16 4z"/>
+            </svg>
+            Everyone can view this post <svg class="chev"><use href="#i-chevron"/></svg>
+          </div>
+          <div class="post-row">
+            <svg class="row-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <circle cx="16" cy="16" r="9"/><circle cx="16" cy="16" r="3.5"/>
+              <path d="M16 3v3M16 26v3M3 16h3M26 16h3M6.8 6.8l2.1 2.1M23.1 23.1l2.1 2.1M25.2 6.8l-2.1 2.1M8.9 23.1l-2.1 2.1"/>
+            </svg>
+            More options <svg class="chev"><use href="#i-chevron"/></svg>
+          </div>
+          <div class="post-row">
+            <svg class="row-icon" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 27c1.7-8.6 6.6-13.2 16-13.8V5.5l10 8.7-10 8.5v-6c-6.8.5-11.7 3.9-16 10.3z"/>
+            </svg>
+            Share to <svg class="chev"><use href="#i-chevron"/></svg>
+          </div>
+        </div>
+        <div class="post-actions">
+          <button class="draft-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8h14v12H5zM4 4h16v4H4zM9 13h6"/></svg>
+            Drafts
+          </button>
+          <button class="publish-btn" id="publishBtn" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 17V7M8.5 10.5L12 7l3.5 3.5"/></svg>
+            Post
+          </button>
+        </div>
+      </div>
+
+      <!-- ---------- 投稿后的 TikTok Feed ---------- -->
+      <div class="feedview" id="feedview">
+        <div class="movie-stage" id="feedMovie"></div>
+        <div class="feed-shade"></div>
+        <div class="feed-top">
+          <div class="live"><svg><use href="#i-live"/></svg>LIVE</div>
+          <span>Singapore</span><span>Following</span><span>Shop</span><span class="active">For You</span>
+          <svg class="search"><use href="#i-search"/></svg>
+        </div>
+        <div class="feed-cap">
+          <div class="user">@zhanghej1ng</div>
+          <div class="copy">my bestie thought he was cheating 😭 #chatintosong #fyp</div>
+          <div class="sound"><svg><use href="#i-music"/></svg>original sound · Your Boys Are Getting Fixed</div>
+        </div>
+        <div class="feed-rail">
+          <div class="item"><div class="feed-avatar-wrap"><div class="feed-avatar"><img id="feedAvatar" alt=""></div><span class="feed-follow"><svg><use href="#i-plus"/></svg></span></div></div>
+          <div class="item" id="feedLike"><svg><use href="#i-heart"/></svg><span id="feedLikeN">0</span></div>
+          <div class="item"><svg><use href="#i-cmt"/></svg><span id="feedCmtN">0</span></div>
+          <div class="item"><svg><use href="#i-save"/></svg><span id="feedSaveN">0</span></div>
+          <div class="item"><svg><use href="#i-share"/></svg><span id="feedShareN">0</span></div>
+          <div class="feed-disc"><img id="feedDisc" alt=""></div>
+        </div>
+        <div class="feed-tabs">
+          <div class="tab active"><svg><use href="#i-home"/></svg>Home</div>
+          <div class="tab"><svg><use href="#i-friends"/></svg>Friends</div>
+          <div class="tab"><div class="plus-wrap"><div class="plus"><svg><use href="#i-plus"/></svg></div></div></div>
+          <div class="tab"><svg><use href="#i-inbox"/></svg>Inbox</div>
+          <div class="tab"><svg><use href="#i-profile"/></svg>Profile</div>
+        </div>
+      </div>
+
+      <div class="toast" id="toast"></div>
+      <div class="home-ind" id="homeind"></div>
+    </div>
+  </div></div>
+
+<script>
+/* =====================================================================
+   DATA
+   ===================================================================== */
+function avatarOf(key,label){
+  let h=0; for(const ch of (key||"")) h=(h*31+ch.charCodeAt(0))>>>0;
+  const hue=h%360, hue2=(hue+40)%360;
+  const init=(label||key||"?").replace(/[^A-Za-z\u4e00-\u9fa5]/g,"").slice(0,1).toUpperCase()||"•";
+  const svg=`<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='hsl(${hue},68%,58%)'/><stop offset='1' stop-color='hsl(${hue2},70%,46%)'/></linearGradient></defs><rect width='80' height='80' fill='url(#g)'/><text x='50%' y='53%' dy='.36em' text-anchor='middle' font-family='-apple-system,Arial' font-size='40' font-weight='700' fill='#fff'>${init}</text></svg>`;
+  return "data:image/svg+xml;utf8,"+encodeURIComponent(svg);
+}
+
+const DATA = {
+  clock:"21:53",
+  dmName:"bestie 💗",
+  friendAvatarImg:"./assets/1873425865468938.png",
+  meHandle:"@zhanghej1ng",
+  meAvatarImg:"./assets/1873425865468954.jpg",
+  songTitle:"Your Boys Are Getting Fixed",
+
+  /* DM 对话：直接进入八卦主线。
+     turn:true = 该说话人的第一条；
+     _songStart / _songAnchor / _songEnd = 生成歌曲时的多选边界与锚点。 */
+  chat:[
+    {who:'in',  text:"BRO", turn:true, _songStart:true},
+    {who:'in',  text:"BROOOOOO 😭"},
+    {who:'out', text:"WHAT", turn:true},
+    {who:'in',  text:"I SEE HIM 👀", turn:true},
+    {who:'out', text:"WHO", turn:true},
+    {who:'in',  text:"YOUR BF", turn:true},
+    {who:'out', text:"WHERE", turn:true},
+    {who:'in',  text:"HE JUST WALKED INTO A HOTEL", turn:true},
+    {who:'out', text:"WHAT?????", turn:true},
+    {who:'in',  text:"WITH TWO GUYS", turn:true},
+    {who:'out', text:"TWO???", turn:true},
+    {who:'in',  text:"THEY PUT THEIR ARMS AROUND HIM", turn:true, _songAnchor:true},
+    {who:'out', text:"I'M GONNA THROW UP 🤮", turn:true},
+    {who:'in',  text:"THE ROOM SAYS DO NOT DISTURB", turn:true},
+    {who:'out', text:"I'M CALLING AN UBER", turn:true},
+    {who:'out', text:"I'M COMING OVER"},
+    {who:'out', text:"I'M BRINGING MY ROOMMATE"},
+    {who:'in',  text:"WAIT", turn:true},
+    {who:'out', text:"WAIT WHAT 😳", turn:true},
+    {who:'out', text:"IS HE COMING OUT"},
+    {who:'in',  text:"NO", turn:true},
+    {who:'in',  text:"LOOK AT THE SIGN"},
+    {who:'out', text:"WHAT SIGN", turn:true},
+    {who:'in',  text:"it's a vet", turn:true},
+    {who:'in',  text:"He's holding two cat carriers"},
+    {who:'in',  text:"wait"},
+    {who:'in',  text:"The sign says NEUTER RECOVERY DO NOT DISTURB"},
+    {who:'in',  text:"Your boys are getting fixed"},
+    {who:'in',  text:"Both of them", _songEnd:true},
+    {who:'out', text:"oh my GOD 🤯", turn:true},
+    {who:'out', text:"He texted me 10 minutes ago"},
+    {who:'out', text:"Said don't tell her she'll cry"},
+    {who:'out', text:"I ALREADY TEXTED MY MOM"},
+    {who:'in',  text:"WHAT", turn:true},
+    {who:'out', text:"I TOLD HER HE WAS CHEATING", turn:true},
+    {who:'in',  text:"lol 💀", turn:true},
+    {who:'in',  text:"Text her back"},
+    {who:'out', text:"I CAN'T", turn:true},
+    {who:'out', text:"SHE'S ALREADY ON THE PHONE WITH HIS MOM"},
+    {who:'in',  text:"oh my god", turn:true},
+    {who:'in',  text:"tell him to send pics"},
+    {who:'in',  text:"of the cats"},
+    {who:'in',  text:"NOT him"},
+    {who:'out', text:"already on it 🫡", turn:true},
+    {who:'in',  text:"YOUR BOYS ARE GETTING FIXED", turn:true},
+    {who:'in',  text:"BOTH OF THEM FIXED"},
+  ],
+
+  /* 曲风（反差公式）— 三首真实 Suno 成曲 */
+  styles:{
+    jingju:{ emoji:"🎭", label:"Jinghu × Euro Vocal", badge:"UNEXPECTED",
+             vocal:"Jinghu · dramatic European vocal", file:"./assets/1873425867048985.mp3", dur:80 },
+    huadan:{ emoji:"🌸", label:"Huadan × EDM", badge:"ELECTRO OPERA",
+             vocal:"female · playful operatic vocal", file:"./assets/1873425865468970.mp3", dur:65 },
+    laosheng:{emoji:"🎙", label:"Laosheng × NeoSoul", badge:"DEEP & SOULFUL",
+             vocal:"male · warm low register", file:"./assets/1873425551006842.mp3", dur:87 },
+  },
+  heroStyle:"jingju",
+
+  /* 歌词时间轴 —— 与聊天逐句对应，who 与聊天同侧（in=闺蜜 / out=我）。占位对拍，可替换 */
+  lyrics:[
+    {t:2.5,  who:'in',  text:"YOUR BF"},
+    {t:4.5,  who:'in',  text:"HE JUST WALKED INTO A HOTEL"},
+    {t:6.5,  who:'in',  text:"WITH TWO GUYS"},
+    {t:8.0,  who:'out', text:"TWO???"},
+    {t:10.5, who:'in',  text:"THEY PUT THEIR ARMS AROUND HIM"},
+    {t:13.5, who:'out', text:"I'M GONNA THROW UP"},
+    {t:16.0, who:'in',  text:"THE ROOM SAYS DO NOT DISTURB"},
+    {t:18.5, who:'out', text:"I'M COMING OVER"},
+    {t:21.0, who:'in',  text:"LOOK AT THE SIGN"},
+    {t:23.5, who:'in',  text:"it's a vet"},
+    {t:26.0, who:'in',  text:"He's holding two cat carriers"},
+    {t:28.5, who:'in',  text:"NEUTER RECOVERY: DO NOT DISTURB"},
+    {t:31.5, who:'in',  text:"YOUR BOYS ARE GETTING FIXED", hook:true},
+    {t:35.5, who:'in',  text:"Both of them"},
+    {t:38.5, who:'out', text:"oh my GOD"},
+    {t:41.5, who:'out', text:"I TOLD HER HE WAS CHEATING"},
+    {t:44.5, who:'in',  text:"tell him to send pics of the cats"},
+    {t:47.5, who:'out', text:"already on it"},
+    {t:50.5, who:'in',  text:"YOUR BOYS ARE GETTING FIXED", hook:true},
+    {t:54.0, who:'in',  text:"BOTH OF THEM FIXED", hook:true},
+  ],
+};
+
+/* =====================================================================
+   ENGINE
+   ===================================================================== */
+const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+window.SILENT=false;   // 聊天界面默认静音，只放歌；SILENT=true 时连歌也静音
+
+$("#clock").textContent=DATA.clock;
+(function(){ const im=$("#dmFav"); const fb=avatarOf(DATA.dmName,DATA.dmName);
+  const friend=DATA.friendAvatarImg;
+  im.src=friend; im.onerror=()=>{im.onerror=null;im.src=fb;};
+  $("#quickFriend").src=friend; $("#quickFriend").onerror=()=>{$("#quickFriend").src=fb;};
+  const me=DATA.meAvatarImg||avatarOf(DATA.meHandle,"z");
+  $("#quickMe").src=me;
+  $("#genMe").src=me;
+  $("#storyAvatar").src=me;
+  $("#genFriend").src=friend; $("#genFriend").onerror=()=>{$("#genFriend").src=fb;};
+})();
+const COVER_FB=(function(){const svg=`<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%23FF3B5C'/><stop offset='1' stop-color='%237A2BFF'/></linearGradient></defs><rect width='300' height='300' fill='url(%23g)'/><text x='50%' y='54%' text-anchor='middle' font-size='120'>🐱</text></svg>`;return "data:image/svg+xml;utf8,"+svg;})();
+
+function step(i){ $$(".steps .s").forEach(s=>s.classList.toggle('on', +s.dataset.i===i)); }
+async function toast(_msg,ms=1600){await sleep(ms+280);}
+function darkStatus(on){$("#statusbar").classList.toggle('dark',on);$("#homeind").classList.toggle('dark',on);}
+async function scrollRowToCenter(row,duration=1100){
+  if(!row)return;
+  const body=$("#dmBody"), start=body.scrollTop;
+  const target=Math.max(0,Math.min(body.scrollHeight-body.clientHeight,row.offsetTop-(body.clientHeight-row.offsetHeight)/2));
+  const frames=24;
+  for(let i=1;i<=frames;i++){
+    const p=i/frames, eased=1-Math.pow(1-p,3);
+    body.scrollTop=start+(target-start)*eased;
+    await sleep(duration/frames);
+  }
+  body.scrollTop=target;
+}
+
+const song=$("#song");
+
+/* ---------- DM chat ---------- */
+function chatRowHTML(m,idx){
+  const cont = !m.turn ? ' cont' : '';           // consecutive same-side bubble
+  const turn = m.turn ? ' turn' : '';            // first of a speaker turn → extra top margin
+  return `<div class="mrow ${m.who}${cont}${turn}" data-idx="${idx}">
+      <span class="sc"><svg><use href="#i-check"/></svg></span>
+      <div class="mcol"><div class="msg">${m.text}</div></div>
+    </div>`;
+}
+function renderChat(){
+  const body=$("#dmBody");
+  body.innerHTML='<div class="dm-day">Today</div>';
+  DATA.chat.forEach((m,i)=>body.insertAdjacentHTML('beforeend',chatRowHTML(m,i)));
+  body.scrollTop=body.scrollHeight;
+}
+function renderEmptyChat(){
+  $("#dmBody").innerHTML='<div class="dm-day">Today</div>';
+}
+async function playChat(epoch=null){
+  const body=$("#dmBody");
+  body.innerHTML='<div class="dm-day">Today</div>';
+  // realistic chat pacing: a new speaker turn shows a "typing…" bubble first, then the message
+  // lands; follow-up bubbles in the same turn come as a quick burst (people fire off short lines).
+  for(let i=0;i<DATA.chat.length;i++){
+    if(epoch!==null && epoch!==flowEpoch)return false;
+    const m=DATA.chat[i], len=m.text.length;
+    if(m.turn){
+      // reading/thinking beat before someone starts a new turn
+      await sleep(i===0?650:900+Math.random()*420);
+      // show a typing indicator on the correct side, sized to how long the message is
+      const typeMs = Math.min(1800, 700 + len*38);
+      const tRow=document.createElement('div');
+      tRow.className='mrow '+m.who;
+      tRow.innerHTML='<span class="sc"></span><div class="mcol"><div class="typing"><i></i><i></i><i></i></div></div>';
+      body.appendChild(tRow); body.scrollTop=body.scrollHeight;
+      await sleep(typeMs);
+      if(epoch!==null && epoch!==flowEpoch)return false;
+      tRow.remove();
+    } else {
+      // same person firing a quick follow-up
+      await sleep(680+Math.random()*320);
+    }
+    body.insertAdjacentHTML('beforeend',chatRowHTML(m,i));
+    body.scrollTop=body.scrollHeight;
+  }
+  return true;
+}
+/* ---------- selection mode ---------- */
+let selecting=false; const selected=new Set();
+function enterSelect(seedIdx){
+  selecting=true; $("#dm").classList.add('selecting');
+  $("#textToMusic").setAttribute("aria-pressed","true");
+  selected.clear(); $$("#dmBody .mrow.sel").forEach(r=>r.classList.remove('sel'));
+  if(seedIdx!=null) toggleSel(seedIdx,true);
+  $("#genbar").classList.add('show'); updateSelUI();
+  const row=seedIdx!=null?$(`#dmBody .mrow[data-idx="${seedIdx}"]`):null;
+  if(row) row.scrollIntoView({block:"center",behavior:"smooth"});
+}
+function exitSelect(){ selecting=false; $("#dm").classList.remove('selecting'); selected.clear();
+  $("#textToMusic").setAttribute("aria-pressed","false");
+  $$("#dmBody .mrow.sel").forEach(r=>r.classList.remove('sel')); $("#genbar").classList.remove('show'); updateSelUI(); }
+function toggleSel(idx,force){
+  const row=$(`#dmBody .mrow[data-idx="${idx}"]`); if(!row) return;
+  const on=(force!=null)?force:!selected.has(idx);
+  if(on){selected.add(idx);row.classList.add('sel');} else {selected.delete(idx);row.classList.remove('sel');}
+}
+function updateSelUI(){
+  const count=selected.size, button=$("#textToMusic");
+  const unit=count===1?"message":"messages";
+  $("#genCnt").textContent=count;
+  $("#genLabel").textContent=`${unit} selected`;
+  button.classList.toggle("ready",selecting&&count>0);
+  button.setAttribute("aria-label",selecting
+    ? (count?`${count} ${unit} selected. Tap again to make a song.`:"Select messages, then tap again to make a song.")
+    : "Text to music");
+}
+$("#dmBody").addEventListener('click',e=>{
+  if(!selecting) return; const row=e.target.closest('.mrow'); if(!row) return;
+  toggleSel(+row.dataset.idx); updateSelUI();
+});
+let lpTimer=null;
+(function bindLongPress(){
+  const body=$("#dmBody");
+  const start=e=>{ if(selecting) return; const row=e.target.closest('.mrow'); if(!row) return; lpTimer=setTimeout(()=>openCtx(row),460); };
+  const cancel=()=>clearTimeout(lpTimer);
+  body.addEventListener('pointerdown',start); body.addEventListener('pointerup',cancel);
+  body.addEventListener('pointerleave',cancel); body.addEventListener('pointermove',cancel);
+})();
+function openCtx(row){
+  const ctx=$("#ctx"), tray=$("#reacttray"), screen=$("#screen");
+  const items=[];
+  items.push(`<div class="ci" data-act="reply">Reply<svg><use href="#i-reply"/></svg></div>`);
+  items.push(`<div class="ci" data-act="forward">Forward<svg><use href="#i-share"/></svg></div>`);
+  items.push(`<div class="ci" data-act="copy">Copy<svg><use href="#i-copy"/></svg></div>`);
+  items.push(`<div class="ci hot" data-act="multi">Select messages<svg><use href="#i-music"/></svg></div>`);
+  ctx.innerHTML=items.join(""); ctx.dataset.idx=row.dataset.idx; ctx.classList.add('show');
+  tray.dataset.idx=row.dataset.idx; renderReactItems("emoji"); tray.classList.add("show");
+  tray.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.reactTab==="emoji"));
+  const r=row.getBoundingClientRect(), s=screen.getBoundingClientRect(), scale=s.width/screen.offsetWidth||1;
+  let top=(r.bottom-s.top)/scale+8, left=(r.left-s.left)/scale;
+  const w=ctx.offsetWidth||212; left=Math.max(12,Math.min(left,screen.offsetWidth-w-12));
+  top=Math.min(top,screen.offsetHeight-260);
+  ctx.style.top=top+"px"; ctx.style.left=left+"px";
+  const trayTop=Math.max(96,top-112);
+  tray.style.top=trayTop+"px"; tray.style.left=Math.max(12,Math.min((r.left-s.left)/scale,screen.offsetWidth-312))+"px";
+}
+function closeCtx(){ $("#ctx").classList.remove('show'); $("#reacttray").classList.remove("show"); }
+function renderReactItems(mode){
+  const box=$("#reactItems");
+  if(mode==="emoji"){
+    box.innerHTML=["😍","🥺","😱","🤗","🙈","😜","🎉"].map(x=>`<div class="react-item">${x}</div>`).join("");
+  }else{
+    const me=DATA.meAvatarImg||avatarOf(DATA.meHandle,"z");
+    const friend=$("#dmFav").currentSrc||$("#dmFav").src;
+    const avatars=[
+      {src:friend,mood:"😂"},
+      {src:me,mood:"💗"},
+      {src:friend,mood:"😱"},
+      {src:me,mood:"👏"},
+      {src:friend,mood:"💀"},
+    ];
+    box.innerHTML=avatars.map(a=>`<div class="react-item avatar"><img src="${a.src}" alt=""><span class="avatar-mood">${a.mood}</span></div>`).join("");
+  }
+}
+$("#reacttray").addEventListener("click",e=>{
+  const tab=e.target.closest("[data-react-tab]");
+  if(tab){
+    $$("#reacttray .tab").forEach(t=>t.classList.toggle("on",t===tab)); renderReactItems(tab.dataset.reactTab); return;
+  }
+});
+$("#ctx").addEventListener('click',e=>{
+  const ci=e.target.closest('.ci'); if(!ci) return;
+  const idx=+$("#ctx").dataset.idx, act=ci.dataset.act; closeCtx();
+  if(act==='multi') enterSelect(idx);
+  else if(act==='copy') toast("Copied");
+});
+$("#screen").addEventListener('click',e=>{ if($("#ctx").classList.contains('show') && !e.target.closest('#ctx') && !e.target.closest('#reacttray') && !e.target.closest('.mrow')) closeCtx(); });
+function useTextToMusic(epoch=null){
+  if(!selecting){ enterSelect(); return; }
+  if(selected.size) return startGenerate(epoch);
+}
+$("#textToMusic").addEventListener("click",()=>useTextToMusic());
+$("#textToMusic").addEventListener("keydown",e=>{
+  if(e.key!=="Enter"&&e.key!==" ") return;
+  e.preventDefault();
+  useTextToMusic();
+});
+$("#genCancel").addEventListener('click',exitSelect);
+
+/* ---------- 生成动画 ---------- */
+const GEN_STEPS=[
+  {status:"Reading selected messages...",percent:8},
+  {status:"Processing the lyrics...",percent:18},
+  {status:"Finding the hook...",percent:36},
+  {status:"Composing the melody...",percent:58},
+  {status:"Mixing the vocals...",percent:79},
+  {status:"Rendering your video...",percent:100},
+];
+let genPreviewTimer=null, genStateTimer=null, genPreviewIndex=0;
+function setGenerationState(state){
+  const percent=$("#genPercent"), status=$("#genStatus");
+  percent.style.opacity=status.style.opacity=".35";
+  percent.style.transform=status.style.transform="translateY(3px)";
+  clearTimeout(genStateTimer);
+  genStateTimer=setTimeout(()=>{
+    percent.textContent=state.percent+"%"; status.textContent=state.status;
+    percent.style.opacity=status.style.opacity="1";
+    percent.style.transform=status.style.transform="";
+  },140);
+}
+function stopGenerationPreview(){ clearInterval(genPreviewTimer); clearTimeout(genStateTimer); genPreviewTimer=genStateTimer=null; }
+function startGenerationPreview(){
+  stopGenerationPreview(); genPreviewIndex=0; setGenerationState(GEN_STEPS[0]);
+  genPreviewTimer=setInterval(()=>{
+    genPreviewIndex=(genPreviewIndex+1)%GEN_STEPS.length;
+    setGenerationState(GEN_STEPS[genPreviewIndex]);
+  },900);
+}
+async function startGenerate(epoch=null){
+  stopGenerationPreview();
+  if(selecting) exitSelect();
+  closeCtx(); step(3); $("#genview").classList.add('show'); darkStatus(false);
+  setGenerationState(GEN_STEPS[0]);
+  for(let i=1;i<GEN_STEPS.length;i++){
+    await sleep(700);
+    if(epoch!==null && epoch!==flowEpoch)return false;
+    setGenerationState(GEN_STEPS[i]);
+  }
+  await sleep(500);
+  if(epoch!==null && epoch!==flowEpoch)return false;
+  $("#genview").classList.remove('show'); openSong(DATA.heroStyle);
+  return true;
+}
+
+let chosenStyle=DATA.heroStyle;
+
+/* ---------- 用户提供的最终成片 ---------- */
+let currentStyle=DATA.heroStyle, posted=false;
+function playSong(restart=true){
+  song.loop=true; song.muted=!!window.SILENT; song.volume=1;
+  if(restart) try{song.currentTime=0;}catch(e){}
+  const p=song.play();
+  if(p&&p.catch) p.catch(()=>{
+    song.muted=true;
+    const q=song.play();
+    if(q&&q.catch) q.catch(()=>{});
+  });
+}
+function stopMovie(){ try{song.pause();}catch(e){} }
+function openSong(styleKey){
+  currentStyle=styleKey; chosenStyle=styleKey; step(4); posted=false;
+  $("#previewMovie").appendChild(song);
+  $("#postview").classList.remove('show');
+  $("#feedview").classList.remove('show');
+  $("#songview").classList.add('show');
+  darkStatus(false);
+  playSong(true);
+}
+function openPublish(){
+  step(5);
+  stopMovie();
+  $("#publishMovie").appendChild(song);
+  try{song.currentTime=0;}catch(e){}
+  $("#songview").classList.remove('show');
+  $("#feedview").classList.remove('show');
+  $("#postview").classList.add('show');
+  darkStatus(true);
+}
+$("#previewMovie").addEventListener('click',()=>{ if(song.paused)playSong(false);else song.pause(); });
+$("#svBack").addEventListener('click',()=>{
+  stopMovie();
+  $("#songview").classList.remove('show');
+  darkStatus(true);
+});
+$("#previewNext").addEventListener('click',openPublish);
+$("#postBack").addEventListener('click',()=>openSong(currentStyle));
+
+function fmtK(n){ if(n>=1e6)return (n/1e6).toFixed(1).replace(/\.0$/,'')+"M"; if(n>=1e3)return (n/1e3).toFixed(1).replace(/\.0$/,'')+"K"; return ""+n; }
+function countUp(el,target,ms=2600){
+  const start=performance.now();
+  function frame(now){ const x=Math.min(1,(now-start)/ms), eased=1-Math.pow(1-x,3); el.textContent=fmtK(Math.floor(target*eased)); if(x<1)requestAnimationFrame(frame); }
+  requestAnimationFrame(frame);
+}
+function heartBurst(){
+  const feed=$("#feedview");
+  for(let i=0;i<10;i++) setTimeout(()=>{
+    const h=document.createElement("div"); h.className="float-heart"; h.style.right=(20+Math.random()*65)+"px";
+    h.innerHTML='<svg><use href="#i-heart"/></svg>'; feed.appendChild(h); setTimeout(()=>h.remove(),1600);
+  },i*150);
+}
+/* ---------- 投稿：进入真实 Feed 并获得互动 ---------- */
+async function doPost(){
+  if(posted) return; posted=true; step(6);
+  $("#feedMovie").appendChild(song);
+  $("#songview").classList.remove('show'); $("#postview").classList.remove('show'); $("#feedview").classList.add('show'); darkStatus(false); playSong(true);
+  const feedAvatarSrc=DATA.meAvatarImg||avatarOf(DATA.meHandle,"z");
+  $("#feedAvatar").src=feedAvatarSrc;
+  $("#feedDisc").src=feedAvatarSrc;
+  ["#feedLikeN","#feedCmtN","#feedSaveN","#feedShareN"].forEach(s=>$(s).textContent="0");
+  await sleep(350);
+  $("#feedLike").classList.add("liked"); heartBurst();
+  countUp($("#feedLikeN"),128000); countUp($("#feedCmtN"),9400); countUp($("#feedSaveN"),41000); countUp($("#feedShareN"),22000);
+}
+$("#publishBtn").addEventListener('click',doPost);
+
+function waitForSongToFinish(){
+  song.loop=false;
+  return new Promise(resolve=>{
+    let settled=false;
+    const finish=()=>{
+      if(settled)return;
+      settled=true;
+      song.removeEventListener("ended",finish);
+      resolve();
+    };
+    song.addEventListener("ended",finish,{once:true});
+    const remaining=Number.isFinite(song.duration)
+      ? Math.max(0,song.duration-song.currentTime)
+      : 66.1;
+    setTimeout(finish,(remaining+3)*1000);
+  });
+}
+
+/* ---------- mute toggle ---------- */
+$("#muteToggle").addEventListener('click',()=>{
+  const on=$("#muteToggle").classList.toggle('on'); window.SILENT=on;
+  $("#muteLbl").textContent=on?"全程静音（纯视觉）":"聊天界面静音（推荐）";
+  song.muted=on;
+});
+
+/* =====================================================================
+   AUTOPLAY FLOW —— DM → 多选聊天 → 成歌 → 参考视频预览 → 投稿 Feed
+   ===================================================================== */
+let running=false, flowEpoch=0;
+function setFlowControls(b){ ["#play","#replay","#reset"].forEach(s=>{const el=$(s);if(el)el.disabled=b;}); }
+function hardReset(){
+  flowEpoch++; running=false; posted=false;
+  stopGenerationPreview();
+  stopMovie(); try{song.currentTime=0;}catch(e){} $("#previewMovie").appendChild(song);
+  exitSelect(); closeCtx();
+  ["#genview","#songview","#postview","#feedview"].forEach(s=>$(s).classList.remove('show'));
+  $("#feedLike").classList.remove("liked");
+  chosenStyle=DATA.heroStyle; currentStyle=DATA.heroStyle;
+  renderEmptyChat(); darkStatus(true); step(-1);
+}
+function getSongRange(){
+  const markedStart=DATA.chat.findIndex(m=>m._songStart);
+  const markedEnd=DATA.chat.findIndex(m=>m._songEnd);
+  return {
+    start:markedStart<0?0:markedStart,
+    end:markedEnd<0?DATA.chat.length-1:markedEnd,
+  };
+}
+async function selectMessagesLikeHuman(anchor,start,end,epoch=null){
+  const body=$("#dmBody");
+  for(let i=anchor-1;i>=start;i--){
+    if(epoch!==null && epoch!==flowEpoch)return false;
+    const row=$(`#dmBody .mrow[data-idx="${i}"]`); if(!row)continue;
+    await scrollRowToCenter(row,380);
+    toggleSel(i,true); updateSelUI();
+    await sleep(170);
+  }
+  await scrollRowToCenter($(`#dmBody .mrow[data-idx="${anchor}"]`),520);
+  for(let i=anchor+1;i<=end;i++){
+    if(epoch!==null && epoch!==flowEpoch)return false;
+    const row=$(`#dmBody .mrow[data-idx="${i}"]`); if(!row)continue;
+    await scrollRowToCenter(row,380);
+    toggleSel(i,true); updateSelUI();
+    await sleep(170);
+  }
+  body.scrollTop=body.scrollHeight;
+  return true;
+}
+async function playFlow(){
+  if(running) return; hardReset(); const epoch=flowEpoch; running=true; setFlowControls(true);
+  const BEAT=850;
+  const songAnchorIdx=DATA.chat.findIndex(m=>m._songAnchor);
+  const {start:songStart,end:songEnd}=getSongRange();
+  try{
+    // 1. 八卦逐条弹入
+    step(0); darkStatus(true); await sleep(600);
+    if(await playChat(epoch)===false)return; await sleep(BEAT); if(epoch!==flowEpoch)return;
+    // 2. 从目标句先向上、再向下多选整段
+    step(1);
+    $("#textToMusic").style.transform="scale(.96)"; await sleep(150); $("#textToMusic").style.transform="";
+    enterSelect(songAnchorIdx);
+    if(await selectMessagesLikeHuman(songAnchorIdx,songStart,songEnd,epoch)===false)return;
+    await sleep(BEAT);
+    // 3. 再次点击同一个 Text to music 按钮生成
+    step(2); $("#textToMusic").style.transform="scale(.93)"; await sleep(150); $("#textToMusic").style.transform=""; await sleep(150);
+    if(await useTextToMusic(epoch)===false)return; await sleep(500); if(epoch!==flowEpoch)return;
+    // 4–5. 内置曲风生成过场并直接进入成片
+    await sleep(11000);
+    // 6. 进入投稿页，等待用户主动点击 Post
+    $("#previewNext").style.transform="scale(.96)"; await sleep(150); $("#previewNext").style.transform="";
+    openPublish();
+    if(RECORD_MODE&&screenRecorder?.state==="recording"){
+      await sleep(2500);
+      await doPost();
+      await waitForSongToFinish();
+      await sleep(2000);
+      await finishScreenRecording();
+    }
+  } finally { if(epoch===flowEpoch){running=false;setFlowControls(false);} }
+}
+
+async function jumpToStep(i){
+  hardReset(); setFlowControls(false); step(i);
+  const songAnchorIdx=DATA.chat.findIndex(m=>m._songAnchor);
+  const {start:songStart,end:songEnd}=getSongRange();
+  if(i===0){
+    renderChat(); $("#dmBody").scrollTop=0;
+  }else if(i===1){
+    renderChat();
+    const body=$("#dmBody");
+    body.scrollTop=body.scrollHeight;
+    $("#textToMusic").style.transform="scale(.96)";
+    await sleep(150);
+    $("#textToMusic").style.transform="";
+    enterSelect();
+  }else if(i===2){
+    renderChat(); enterSelect();
+    for(let x=songStart;x<=songEnd;x++) toggleSel(x,true);
+    updateSelUI(); $("#dmBody").scrollTop=$(`#dmBody .mrow[data-idx="${songEnd}"]`).offsetTop;
+  }else if(i===3){
+    darkStatus(false); $("#genview").classList.add("show"); startGenerationPreview();
+  }else if(i===4){
+    openSong(DATA.heroStyle);
+  }else if(i===5){
+    openPublish();
+  }else if(i===6){
+    openPublish(); await doPost();
+  }
+}
+$$(".steps .s").forEach(s=>{
+  s.setAttribute("role","button"); s.setAttribute("tabindex","0"); s.title=`Jump to step ${+s.dataset.i+1}`;
+  s.addEventListener("click",()=>jumpToStep(+s.dataset.i));
+  s.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();jumpToStep(+s.dataset.i);}});
+});
+$("#play").addEventListener('click',()=>playFlow());
+$("#replay").addEventListener('click',()=>{ if(running)return; playFlow(); });
+$("#reset").addEventListener('click',()=>{ if(running)return; hardReset(); });
+
+/* ---------- init ---------- */
+renderEmptyChat(); darkStatus(true);
+const SEARCH_PARAMS=new URLSearchParams(location.search);
+const PHONE_ONLY=SEARCH_PARAMS.has("phone");
+const RECORD_MODE=SEARCH_PARAMS.has("record");
+let screenStream=null, screenRecorder=null, screenChunks=[], screenStopPromise=null;
+
+function recordingMimeType(){
+  return [
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm",
+  ].find(type=>MediaRecorder.isTypeSupported(type))||"";
+}
+async function beginScreenRecording(){
+  screenStream=await navigator.mediaDevices.getDisplayMedia({
+    video:{displaySurface:"browser",frameRate:{ideal:30,max:30}},
+    audio:{suppressLocalAudioPlayback:false},
+    preferCurrentTab:true,
+    selfBrowserSurface:"include",
+    surfaceSwitching:"exclude",
+    systemAudio:"include",
+    monitorTypeSurfaces:"exclude",
+  });
+  if(!screenStream.getAudioTracks().length){
+    screenStream.getTracks().forEach(track=>track.stop());
+    screenStream=null;
+    throw new Error("Share this Chrome tab and enable tab audio.");
+  }
+  screenChunks=[];
+  const mimeType=recordingMimeType();
+  screenRecorder=new MediaRecorder(screenStream,mimeType?{mimeType,videoBitsPerSecond:10000000}:undefined);
+  screenRecorder.addEventListener("dataavailable",e=>{if(e.data.size)screenChunks.push(e.data);});
+  screenStopPromise=new Promise(resolve=>{
+    screenRecorder.addEventListener("stop",()=>{
+      const blob=new Blob(screenChunks,{type:screenRecorder.mimeType||"video/webm"});
+      const link=document.createElement("a");
+      link.href=URL.createObjectURL(blob);
+      link.download="tt-text-to-music-full-flow.webm";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(()=>URL.revokeObjectURL(link.href),30000);
+      screenStream?.getTracks().forEach(track=>track.stop());
+      window.RECORDING_SAVED=true;
+      resolve(blob);
+    },{once:true});
+  });
+  screenStream.getVideoTracks()[0]?.addEventListener("ended",()=>{
+    if(screenRecorder?.state==="recording")screenRecorder.stop();
+  },{once:true});
+}
+async function finishScreenRecording(){
+  if(screenRecorder?.state==="recording")screenRecorder.stop();
+  return screenStopPromise;
+}
+
+if(PHONE_ONLY) document.body.classList.add("phone-only");
+if(RECORD_MODE){
+  $("#startGate .gate-content").lastChild.textContent="Click, then share this tab with audio";
+}
+$("#startGate").addEventListener("click",async()=>{
+  const gate=$("#startGate");
+  if(RECORD_MODE){
+    gate.disabled=true;
+    try{
+      await beginScreenRecording();
+      gate.classList.add("hide");
+      await sleep(500);
+      screenRecorder.start(1000);
+      await sleep(300);
+      await playFlow();
+    }catch(error){
+      gate.disabled=false;
+      gate.classList.remove("hide");
+      const small=$("#startGate small");
+      small.textContent=error?.message||"Screen recording could not start.";
+    }
+    return;
+  }
+  gate.classList.add("hide");
+  playFlow();
+});
+function fit(){
+  if(PHONE_ONLY){
+    const pad=24,availH=window.innerHeight-pad,availW=window.innerWidth-pad;
+    const s=Math.min(availH/852,availW/393,3);
+    document.querySelector(".stage").style.setProperty("--fit",s.toFixed(3));
+    return;
+  }
+  const pad=90,availH=window.innerHeight-pad,availW=window.innerWidth-360;
+  const s=Math.min(availH/852,availW/393,1);
+  document.querySelector(".stage").style.setProperty("--fit",s.toFixed(3));
+}
+window.addEventListener('resize',fit); fit();
+if(location.search.includes('autoplay')&&!PHONE_ONLY){ setTimeout(()=>playFlow(),1200); }
+</script>
+</body>
+</html>
